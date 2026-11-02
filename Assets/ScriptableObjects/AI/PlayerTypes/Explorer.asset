@@ -17,3 +17,4 @@ MonoBehaviour:
   fight: 0.2
   collectItems: 0.7
   completeQuests: 1
+  betrayGroup: 0

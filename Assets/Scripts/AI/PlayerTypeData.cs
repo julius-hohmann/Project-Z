@@ -13,4 +13,5 @@ public class PlayerTypeData : ScriptableObject
     public float fight;
     public float collectItems;
     public float completeQuests;
+    public float betrayGroup;
 }

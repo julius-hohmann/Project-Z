@@ -270,6 +270,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 03c103af860042244ba033ddb3fd1009, type: 2}
   - {fileID: 11400000, guid: b0de01c74ce61b6469aa9ae50cdc706b, type: 2}
   - {fileID: 11400000, guid: 30f4ab4d455a4054f97205de25151cf6, type: 2}
+  - {fileID: 11400000, guid: 7b533b28ec94442ab56681cf25014c0d, type: 2}
   inventory: {fileID: 0}
   weaponHandler: {fileID: 0}
   stats: {fileID: 0}
@@ -284,6 +285,8 @@ MonoBehaviour:
   visionLayers:
     serializedVersion: 2
     m_Bits: 5120
+  maxActionDuration: 30
+  ignoreItemDuration: 30
 --- !u!114 &2952789841592800618
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -379,6 +382,7 @@ MonoBehaviour:
   visionRange: 25
   visionAngle: 90
   scanFrequency: 30
+  itemMemoryDuration: 5
   itemLayer:
     serializedVersion: 2
     m_Bits: 2048
@@ -458,7 +462,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5fac05df11e8e9b4c92bf347e6e7c4bf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  currentGroup: {fileID: 0}
   isInvited: 0
 --- !u!114 &843585142548548407
 MonoBehaviour:
@@ -474,6 +477,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   TMPName: {fileID: 904818040142134940}
   canvas: {fileID: 5334169597167144123}
+  cam: {fileID: 0}
 --- !u!195 &5907772849135536243
 NavMeshAgent:
   m_ObjectHideFlags: 0

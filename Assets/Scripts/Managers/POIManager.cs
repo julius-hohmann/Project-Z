@@ -31,9 +31,13 @@ public class POIManager : MonoBehaviour
         PointOfInterest nearestArea = null;
         float distance = Mathf.Infinity;
 
-        foreach (PointOfInterest area in availableAreas) 
+        foreach (PointOfInterest area in availableAreas)
         {
             PointOfInterest poi = area.GetComponent<PointOfInterest>();
+
+            //Exploring means going somewhere else, even if the current area was already forgotten
+            if (poi == npc.poiHandler.currentArea)
+                continue;
 
             if (type != POIType.None)
             {
@@ -56,7 +60,30 @@ public class POIManager : MonoBehaviour
                 nearestArea = area;
             }                
         }
+
+        if (nearestArea == null && type == POIType.None)
+            return GetLeastRecentlyVisitedArea(npc);
+
         return nearestArea;
+    }
+
+    private PointOfInterest GetLeastRecentlyVisitedArea(NPCController npc)
+    {
+        PointOfInterest oldestArea = null;
+        float oldestVisit = Mathf.Infinity;
+
+        foreach (PointOfInterest area in availableAreas)
+        {
+            if (area == npc.poiHandler.currentArea || !npc.poiHandler.knownAreas.ContainsKey(area))
+                continue;
+
+            if (npc.poiHandler.knownAreas[area] < oldestVisit)
+            {
+                oldestVisit = npc.poiHandler.knownAreas[area];
+                oldestArea = area;
+            }
+        }
+        return oldestArea;
     }
 
     public int GetNumberOfUnexploredAreas(NPCController npc)

@@ -22,6 +22,18 @@ public class NPCController : MonoBehaviour
     public Transform eyesPoint;
     public LayerMask visionLayers;
 
+    public float maxActionDuration = 30f;
+    public float ignoreItemDuration = 30f;
+    public float fleeDistance = 10f;
+    public float minFleeDistanceGain = 2f;
+    public float maxFleeDuration = 5f;
+    private float actionStartTime;
+
+    public bool HasItemToCollect
+    {
+        get { return sensingHandler.KnownItems.Count > 0 && inventory.slots.Count < inventory.maxSlots; }
+    }
+
     private void Awake()
     {
         movementController = GetComponent<MovementController>();
@@ -42,7 +54,15 @@ public class NPCController : MonoBehaviour
         if (aiBrain.finishedDeciding)
         {
             aiBrain.finishedDeciding = false;
+            actionStartTime = Time.time;
             aiBrain.bestAction.Execute(this);
+        }
+        else if (aiBrain.bestAction != null && Time.time - actionStartTime > maxActionDuration)
+        {
+            //Stuck actions must not block the agent forever
+            actionStartTime = Time.time;
+            StopAllCoroutines();
+            OnFinishedAction();
         }
     }
 
@@ -51,75 +71,104 @@ public class NPCController : MonoBehaviour
         aiBrain.DecideBestAction(availableActions);
     }
 
+    private void StartAction(IEnumerator action)
+    {
+        StartCoroutine(RunAction(action));
+    }
+
+    //Exceptions end a coroutine without finishing the action, so the agent has to decide again here
+    private IEnumerator RunAction(IEnumerator action)
+    {
+        while (true)
+        {
+            try
+            {
+                if (!action.MoveNext())
+                    yield break;
+            }
+            catch (System.Exception exception)
+            {
+                Debug.LogException(exception, this);
+                OnFinishedAction();
+                yield break;
+            }
+            yield return action.Current;
+        }
+    }
+
     #region Actions
     internal void Drink(int time)
     {
-        StartCoroutine(DrinkCoroutine(time));
+        StartAction(DrinkCoroutine(time));
     }
 
     internal void Heal(int time)
     {
-        StartCoroutine(HealCoroutine(time));
+        StartAction(HealCoroutine(time));
     }
 
     public void Eat(int time)
     {
-        StartCoroutine(EatCoroutine(time));
+        StartAction(EatCoroutine(time));
     }
     internal void SearchForItems()
     {
-        StartCoroutine(SearchItemsCoroutine());
+        StartAction(SearchItemsCoroutine(0.5f));
     }
     public void EquipArmor(EquipmentType type)
     {
-        StartCoroutine(EquipArmorCoroutine(1, type));
+        StartAction(EquipArmorCoroutine(1, type));
     }
     public void EquipWeapon(WeaponType type)
     {
-        StartCoroutine(EquipWeaponCoroutine(1, type));
+        StartAction(EquipWeaponCoroutine(1, type));
     }
     public void ReloadWeapon()
     {
         if (weaponHandler.currentWeaponData != null)
-            StartCoroutine(ReloadWeaponCoroutine(weaponHandler.currentWeaponData.reloadTime));
+            StartAction(ReloadWeaponCoroutine(weaponHandler.currentWeaponData.reloadTime));
         else
             Debug.Log(stats.Name + " tries to reload, but has no weapon equipped");
     }
     public void ExploreArea(PointOfInterest poi)
     {
-        StartCoroutine(ExploreAreaCoroutine(poi, 2f));
+        StartAction(ExploreAreaCoroutine(poi, 2f));
     }
     public void MoveAroundArea()
     {
-        StartCoroutine(MoveAroundAreaCoroutine(1f));
+        StartAction(MoveAroundAreaCoroutine(1f));
     }
     public void Flee()
     {
-        StartCoroutine(FleeCoroutine(0.01f));
+        StartAction(FleeCoroutine(0.01f));
     }
     public void Shoot(string tag)
     {
-        StartCoroutine(ShootCoroutine(tag));
+        StartAction(ShootCoroutine(tag));
     }
     public void InviteToGroup()
     {
-        StartCoroutine(InviteToGroupCoroutine(1f));
+        StartAction(InviteToGroupCoroutine(1f));
     }
     public void AcceptInvitation()
     {
-        StartCoroutine(AcceptInvitationCoroutine(1f));
+        StartAction(AcceptInvitationCoroutine(1f));
     }
     public void DeclineInvitation()
     {
-        StartCoroutine(DeclineInvitationCoroutine(1f));
+        StartAction(DeclineInvitationCoroutine(1f));
     }
     public void FollowLeader()
     {
-        StartCoroutine(FollowLeaderCoroutine(1f));
+        StartAction(FollowLeaderCoroutine(0.5f));
+    }
+    public void BetrayGroup()
+    {
+        StartAction(BetrayGroupCoroutine());
     }
     public void ChaseTarget()
     {
-        StartCoroutine(ChaseTargetCoroutine(1f));
+        StartAction(ChaseTargetCoroutine(1f));
     }
 
     #endregion
@@ -167,29 +216,45 @@ public class NPCController : MonoBehaviour
         }
         OnFinishedAction();
     }
-    private IEnumerator SearchItemsCoroutine()
+    private IEnumerator SearchItemsCoroutine(float time)
     {
         //Debug.Log("I am searching for Items");
 
-        if(sensingHandler.ItemsInView.Count > 0)
-        {
-            float distance = Mathf.Infinity;
-            GameObject closestItem = null;
+        float distance = Mathf.Infinity;
+        GameObject closestItem = null;
 
-            foreach (GameObject item in sensingHandler.ItemsInView)
+        foreach (GameObject item in sensingHandler.KnownItems)
+        {
+            float tempDistance = Vector3.Distance(transform.position, item.transform.position);
+            if (tempDistance < distance)
             {
-                float tempDistance = Vector3.Distance(transform.position, item.transform.position);
-                if (tempDistance < distance)
-                {
-                    closestItem = item;
-                    distance = tempDistance;
-                }
+                closestItem = item;
+                distance = tempDistance;
             }
-            movementController.MoveTo(closestItem.transform.position);
         }
 
+        if (closestItem != null)
+        {
+            movementController.MoveTo(closestItem.transform.position);
 
-        yield return null;
+            //Keep walking to the item for a while, even if it leaves the vision cone
+            float elapsedTime = 0f;
+            while (closestItem != null && elapsedTime < time)
+            {
+                yield return null;
+                elapsedTime += Time.deltaTime;
+
+                //Items get collected on contact, so reaching one that still exists means it can't be picked up
+                if (closestItem != null && !movementController.agent.pathPending && movementController.agent.remainingDistance <= 0.5f)
+                {
+                    sensingHandler.IgnoreItem(closestItem, ignoreItemDuration);
+                    break;
+                }
+            }
+        }
+        else
+            yield return null;
+
         OnFinishedAction();
     }
     private IEnumerator EquipArmorCoroutine(int time, EquipmentType type)
@@ -237,7 +302,7 @@ public class NPCController : MonoBehaviour
             while (movementController.agent.pathPending || movementController.agent.remainingDistance > 0.5f)
             {
                 yield return null;
-                if (sensingHandler.ItemsInView.Count > 0 || threatHandler.VisibleEnemies.Count > 0)
+                if (HasItemToCollect || threatHandler.VisibleEnemies.Count > 0)
                 {
                     waitTime = 0f;
                     break;
@@ -268,20 +333,29 @@ public class NPCController : MonoBehaviour
 
     private IEnumerator ExploreAreaCoroutine(PointOfInterest poi, float time)
     {
-        if (poi != null)
-            movementController.MoveTo(poi.transform.position);
-
         eventHandler.UpdateDestination(poi);
 
-        while (movementController.agent.pathPending || movementController.agent.remainingDistance > 0.5f)
+        if (poi != null)
         {
-            yield return null;
+            movementController.MoveTo(poi.transform.position);
 
-            if (poiHandler.currentArea == poi || sensingHandler.ItemsInView.Count > 0 || threatHandler.VisibleEnemies.Count > 0)
+            bool interrupted = false;
+
+            while (movementController.agent.pathPending || movementController.agent.remainingDistance > 0.5f)
             {
-                time = 0f;
-                break;
+                yield return null;
+
+                if (poiHandler.currentArea == poi || HasItemToCollect || threatHandler.VisibleEnemies.Count > 0)
+                {
+                    time = 0f;
+                    interrupted = true;
+                    break;
+                }
             }
+
+            //The path ended without entering the area, so it can't be reached from here
+            if (!interrupted && poiHandler.currentArea != poi)
+                poiHandler.MarkAreaAsVisited(poi);
         }
         yield return new WaitForSeconds(time);
 
@@ -290,23 +364,77 @@ public class NPCController : MonoBehaviour
 
     private IEnumerator FleeCoroutine(float time)
     {
-        GameObject enemy = stats.recentlyAttackedBy;
-        if (enemy == null)
-            enemy = threatHandler.GetClosestInVision();
+        GameObject enemy = GetEnemyToFleeFrom();
+
         if(enemy != null)
         {
-            Vector3 direction = (transform.position - enemy.transform.position).normalized;
-            movementController.MoveTo(transform.position + direction * 10);
-
-            while (movementController.agent.pathPending || movementController.agent.remainingDistance > 0.5f)
+            if (TryGetFleePosition(enemy.transform.position, out Vector3 fleePosition))
             {
-                yield return null;
+                movementController.MoveTo(fleePosition);
+
+                float elapsedTime = 0f;
+                while (elapsedTime < maxFleeDuration && (movementController.agent.pathPending || movementController.agent.remainingDistance > 0.5f))
+                {
+                    yield return null;
+                    elapsedTime += Time.deltaTime;
+                }
             }
+            else if (weaponHandler.currentWeapon != null && weaponHandler.CurrentAmmo > 0)
+            {
+                //Cornered, so the only option left is to fight back
+                StartAction(ShootCoroutine(enemy.tag));
+                yield break;
+            }
+            else
+                time = 1f;
         }
 
         yield return new WaitForSeconds(time);
 
         OnFinishedAction();
+    }
+
+    private GameObject GetEnemyToFleeFrom()
+    {
+        GameObject attacker = stats.recentlyAttackedBy;
+        if (attacker != null && threatHandler.DetectedEnemies.Contains(attacker))
+            return attacker;
+
+        GameObject closestVisible = threatHandler.GetClosestInVision();
+        if (closestVisible != null)
+            return closestVisible;
+
+        return threatHandler.GetClosestDetected();
+    }
+
+    //Prefers running straight away from the enemy, other directions are used if that way is blocked
+    private bool TryGetFleePosition(Vector3 enemyPosition, out Vector3 fleePosition)
+    {
+        float[] angles = { 0f, 45f, -45f, 90f, -90f, 135f, -135f };
+
+        Vector3 awayFromEnemy = Vector3.ProjectOnPlane(transform.position - enemyPosition, Vector3.up).normalized;
+        float currentDistance = Vector3.Distance(transform.position, enemyPosition);
+        NavMeshPath path = new NavMeshPath();
+
+        foreach (float angle in angles)
+        {
+            Vector3 candidate = transform.position + Quaternion.Euler(0, angle, 0) * awayFromEnemy * fleeDistance;
+
+            if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, 5f, NavMesh.AllAreas))
+                continue;
+
+            if (Vector3.Distance(hit.position, enemyPosition) < currentDistance + minFleeDistanceGain)
+                continue;
+
+            if (movementController.agent.CalculatePath(hit.position, path) && path.status == NavMeshPathStatus.PathComplete)
+            {
+                fleePosition = hit.position;
+                return true;
+            }
+        }
+
+        fleePosition = Vector3.zero;
+        return false;
     }
 
     private IEnumerator ShootCoroutine(string tag)
@@ -324,6 +452,32 @@ public class NPCController : MonoBehaviour
 
         if (HasLineOfSight(newTarget))
             weaponHandler.Shoot();
+
+        yield return null;
+
+        OnFinishedAction();
+    }
+
+    private IEnumerator BetrayGroupCoroutine()
+    {
+        eventHandler.ChangeMovementState(false);
+
+        GameObject newTarget = threatHandler.GetClosestGroupMemberInVision();
+
+        if (newTarget != null)
+        {
+            FaceTarget(newTarget.transform.position);
+
+            //After the first shot the former group members are regular targets
+            if (HasLineOfSight(newTarget))
+            {
+                threatHandler.currentTarget = newTarget;
+                threatHandler.enemyMemory[newTarget] = newTarget.transform.position;
+
+                groupHandler.BetrayGroup();
+                weaponHandler.Shoot();
+            }
+        }
 
         yield return null;
 
@@ -355,16 +509,20 @@ public class NPCController : MonoBehaviour
         if (go != null)
             target = go.GetComponent<NPCController>();
 
-        if(target != null)
-        {
-            if(groupHandler.currentGroup == null)
-            {
-                groupHandler.currentGroup = gameObject.AddComponent<Group>();
-                groupHandler.currentGroup.groupLeader = this;
-                eventHandler.GroupUpdate(groupHandler.currentGroup);
-            }
+        bool canInvite = groupHandler.currentGroup == null || groupHandler.currentGroup.groupLeader == this;
 
-            target.groupHandler.InviteToGroup(groupHandler.currentGroup);
+        if(target != null && canInvite)
+        {
+            //Remembered even if the target can't be invited, otherwise the agent would keep trying
+            groupHandler.RecentlyInvited.Add(go);
+
+            if (target.groupHandler.CanJoinGroup())
+            {
+                if(groupHandler.currentGroup == null)
+                    new Group(this);
+
+                target.groupHandler.InviteToGroup(groupHandler.currentGroup);
+            }
         }
 
         OnFinishedAction();
@@ -395,19 +553,19 @@ public class NPCController : MonoBehaviour
 
     private IEnumerator FollowLeaderCoroutine(float time)
     {
-        movementController.MoveTo(groupHandler.currentGroup.groupLeader.transform.position);
+        Group group = groupHandler.currentGroup;
 
-        while (movementController.agent.pathPending || movementController.agent.remainingDistance > 0.5f)
+        if (group != null && group.groupLeader != null)
         {
-            //TODO: Add update frequency to reduce amount of updates per second
-            movementController.MoveTo(groupHandler.currentGroup.groupLeader.transform.position);
-            yield return null;
-            if (sensingHandler.ItemsInView.Count > 0 || threatHandler.VisibleEnemies.Count > 0)
-            {
-                break;
-            }
+            Vector3 position = group.GetFormationPosition(this);
+
+            if (!NavMesh.SamplePosition(position, out NavMeshHit hit, 3f, NavMesh.AllAreas))
+                hit.position = group.groupLeader.transform.position;
+
+            movementController.MoveTo(hit.position);
         }
 
+        //The action only runs shortly, so the path gets updated and the agent can react to new situations
         yield return new WaitForSeconds(time);
 
         OnFinishedAction();
@@ -416,13 +574,20 @@ public class NPCController : MonoBehaviour
     private IEnumerator ChaseTargetCoroutine(float time)
     {
         float waitTime = time;
+        Vector3? lastKnownPosition = null;
+
         if (threatHandler.currentTarget != null)
+            lastKnownPosition = threatHandler.GetLastKnownPosition(threatHandler.currentTarget);
+
+        if (lastKnownPosition == null)
+            threatHandler.currentTarget = null;
+        else
         {
-            movementController.MoveTo(threatHandler.enemyMemory[threatHandler.currentTarget]);
+            movementController.MoveTo(lastKnownPosition.Value);
             while (movementController.agent.pathPending || movementController.agent.remainingDistance > 0.5f)
             {
                 yield return null;
-                if (sensingHandler.ItemsInView.Count > 0 || threatHandler.VisibleEnemies.Count > 0)
+                if (HasItemToCollect || threatHandler.VisibleEnemies.Count > 0)
                 {
                     waitTime = 0f;
                     break;

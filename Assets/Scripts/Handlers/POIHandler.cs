@@ -30,6 +30,11 @@ public class POIHandler : MonoBehaviour
         destinationArea = poi;
     }
 
+    public void MarkAreaAsVisited(PointOfInterest poi)
+    {
+        knownAreas[poi] = Time.time;
+    }
+
     private void UpdateCurrentArea(PointOfInterest poi)
     {
         currentArea = poi;

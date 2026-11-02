@@ -19,7 +19,10 @@ public class ThreatHandler : MonoBehaviour
     [SerializeField] public SerializedDictionary<GameObject, Vector3> enemyMemory { get; private set; }
     private List<GameObject> visibleEnemies = new List<GameObject>();
     private List<GameObject> detectedEnemies = new List<GameObject>();
+    private List<GameObject> visibleGroupMembers = new List<GameObject>();
+    private List<(Vector3 point, VisionResult result)> lastScanResults = new List<(Vector3 point, VisionResult result)>();
 
+    private Transform eyesPoint;
 
     public List<GameObject> VisibleEnemies
     {
@@ -43,6 +46,10 @@ public class ThreatHandler : MonoBehaviour
         scanInterval = 1f / scanFrequency;
 
         enemyMemory = new SerializedDictionary<GameObject, Vector3>();
+
+        NPCController npc = GetComponent<NPCController>();
+        if (npc != null)
+            eyesPoint = npc.eyesPoint;
     }
 
     private void FixedUpdate()
@@ -65,6 +72,8 @@ public class ThreatHandler : MonoBehaviour
     {
         List<GameObject> currentlyVisible = new List<GameObject>();
         HashSet<GameObject> currentlyDetected = new HashSet<GameObject>();
+        List<GameObject> currentlyVisibleGroupMembers = new List<GameObject>();
+        lastScanResults.Clear();
 
         foreach (Collider collider in enemyColliders)
         {
@@ -79,13 +88,19 @@ public class ThreatHandler : MonoBehaviour
                 Group myGroup = thisNPC.groupHandler?.currentGroup;
                 if (myGroup != null && myGroup.GroupMembers.Contains(otherNPC))
                 {
+                    if (VisionCheck.Evaluate(GetEyesPosition(), transform.forward, collider, 360f, obstacleLayer) == VisionResult.Visible)
+                        currentlyVisibleGroupMembers.Add(enemy);
+
                     continue;
                 }
             }
 
             currentlyDetected.Add(enemy);
 
-            if (IsInView(enemy))
+            VisionResult result = VisionCheck.Evaluate(GetEyesPosition(), transform.forward, collider, 360f, obstacleLayer);
+            lastScanResults.Add((collider.bounds.center, result));
+
+            if (result == VisionResult.Visible)
             {
                 currentlyVisible.Add(enemy);
                 if (!visibleEnemies.Contains(enemy))
@@ -106,6 +121,7 @@ public class ThreatHandler : MonoBehaviour
         }
 
         visibleEnemies = currentlyVisible;
+        visibleGroupMembers = currentlyVisibleGroupMembers;
 
         List<GameObject> outOfRangeEnemies = new List<GameObject>();
         foreach (GameObject enemy in detectedEnemies)
@@ -124,12 +140,9 @@ public class ThreatHandler : MonoBehaviour
         detectedEnemies = new List<GameObject>(currentlyDetected);
     }
 
-    private bool IsInView(GameObject target)
+    private Vector3 GetEyesPosition()
     {
-        Vector3 directionToTarget = (target.transform.position - transform.position).normalized;
-        float distanceToTarget = Vector3.Distance(transform.position, target.transform.position);
-
-        return !Physics.Raycast(transform.position, directionToTarget, distanceToTarget, obstacleLayer);
+        return eyesPoint != null ? eyesPoint.position : transform.position + Vector3.up;
     }
 
     private IEnumerator RememberEnemyPosition(GameObject enemy)
@@ -160,7 +173,41 @@ public class ThreatHandler : MonoBehaviour
     {
         float distance = Mathf.Infinity;
         GameObject closest = null;
-        foreach (GameObject go in visibleEnemies)
+        foreach (GameObject go in VisibleEnemies)
+        {
+            float d = Vector3.Distance(transform.position, go.transform.position);
+            if (d < distance)
+            {
+                closest = go;
+                distance = d;
+            }
+        }
+        return closest;
+    }
+
+    public GameObject GetClosestDetected()
+    {
+        float distance = Mathf.Infinity;
+        GameObject closest = null;
+        foreach (GameObject go in DetectedEnemies)
+        {
+            float d = Vector3.Distance(transform.position, go.transform.position);
+            if (d < distance)
+            {
+                closest = go;
+                distance = d;
+            }
+        }
+        return closest;
+    }
+
+    public GameObject GetClosestGroupMemberInVision()
+    {
+        visibleGroupMembers.RemoveAll(obj => !obj);
+
+        float distance = Mathf.Infinity;
+        GameObject closest = null;
+        foreach (GameObject go in visibleGroupMembers)
         {
             float d = Vector3.Distance(transform.position, go.transform.position);
             if (d < distance)
@@ -195,5 +242,14 @@ public class ThreatHandler : MonoBehaviour
     {
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, detectionRadius);
+    }
+
+    //Green = visible, red = blocked by an obstacle
+    void OnDrawGizmosSelected()
+    {
+        foreach ((Vector3 point, VisionResult result) in lastScanResults)
+        {
+            VisionCheck.DrawGizmo(GetEyesPosition(), point, result);
+        }
     }
 }

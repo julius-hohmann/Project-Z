@@ -9,7 +9,7 @@ public class ItemInVisionConsideration : Consideration
     [SerializeField] public AnimationCurve responseCurve;
     public override float ScoreConsideration(NPCController npc)
     {
-        score = responseCurve.Evaluate(Convert.ToInt32(npc.sensingHandler.ItemsInView.Count > 0));
+        score = responseCurve.Evaluate(Convert.ToInt32(npc.HasItemToCollect));
         return score;
     }
 }

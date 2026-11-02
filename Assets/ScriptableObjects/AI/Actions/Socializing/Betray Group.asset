@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 131a5b22ef9342e99cabc6a52d7f36d4, type: 3}
+  m_Name: Betray Group
+  m_EditorClassIdentifier: 
+  Name: 
+  considerations:
+  - {fileID: 11400000, guid: 5d4ec6f40ce583c4e98c0f8e7f9127f1, type: 2}
+  - {fileID: 11400000, guid: 47a4a18fcefc9914d8fef46056ab6c72, type: 2}
+  - {fileID: 11400000, guid: e3f1a97c40d24b6e8c15a2d07b96f318, type: 2}
+  - {fileID: 11400000, guid: 56fb2bb5730c4c34d9f2326fb520235a, type: 2}
+  - {fileID: 11400000, guid: 46e10f2739b74f4dbddf12a45a177243, type: 2}

@@ -23,6 +23,7 @@ public class ZombieController : MonoBehaviour
     private ZombieState currentState;
     private NavMeshAgent agent;
     private List<GameObject> targetsInView;
+    private Collider ownCollider;
 
     private float hitDelay;
 
@@ -31,6 +32,7 @@ public class ZombieController : MonoBehaviour
         currentState = ZombieState.Inactive;
         agent = GetComponent<NavMeshAgent>();
         targetsInView = new List<GameObject>();
+        ownCollider = GetComponent<Collider>();
         health = maxHealth;
     }
 
@@ -53,18 +55,15 @@ public class ZombieController : MonoBehaviour
             if (!collider.gameObject.CompareTag("Human"))
                 continue;
 
-            if (IsInView(collider.gameObject) && !targetList.Contains(collider.gameObject))
+            if (IsInView(collider) && !targetList.Contains(collider.gameObject))
             {
                 targetList.Add(collider.gameObject);
             }
         }
     }
-    private bool IsInView(GameObject target)
+    private bool IsInView(Collider target)
     {
-        Vector3 directionToTarget = (target.transform.position - transform.position).normalized;
-        float distanceToTarget = Vector3.Distance(transform.position, target.transform.position);
-
-        return !Physics.Raycast(transform.position, directionToTarget, distanceToTarget, obstacleLayer);
+        return VisionCheck.Evaluate(ownCollider.bounds.center, transform.forward, target, 360f, obstacleLayer) == VisionResult.Visible;
     }
 
     private void FixedUpdate()

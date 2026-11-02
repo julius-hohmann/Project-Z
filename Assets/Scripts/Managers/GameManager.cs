@@ -87,10 +87,6 @@ public class GameManager : MonoBehaviour
         {
             groupList.Remove(group);
         }
-        else if(group.groupLeader == null)
-        {
-            group.groupLeader = group.GroupMembers[0];
-        }
     }
     public void AddPlayer(NPCController npc)
     {

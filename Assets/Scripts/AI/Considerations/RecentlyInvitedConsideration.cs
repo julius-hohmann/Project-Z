@@ -9,9 +9,11 @@ public class RecentlyInvitedConsideration : Consideration
     [SerializeField] public AnimationCurve responseCurve;
     public override float ScoreConsideration(NPCController npc)
     {
-        if (npc.groupHandler.currentGroup == null)
+        bool recentlyInvited = npc.groupHandler.RecentlyInvited.Contains(npc.threatHandler.GetClosestInVision("Human"));
+
+        if (npc.groupHandler.currentGroup == null && !recentlyInvited)
             return npc.playerTypeHandler.playerTypeData.teamUp;
-        score = responseCurve.Evaluate(Convert.ToInt32(npc.groupHandler.currentGroup.RecentlyInvited.Contains(npc.threatHandler.GetClosestInVision("Human"))));
+        score = responseCurve.Evaluate(Convert.ToInt32(recentlyInvited));
         return score;
     }
 }

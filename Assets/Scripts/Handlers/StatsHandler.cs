@@ -15,6 +15,11 @@ public class StatsHandler : MonoBehaviour
     public float maxHunger = 100f;
     public float maxThirst = 100f;
 
+    //Damage per second while hunger or thirst are empty
+    public float starvationDamage = 0.25f;
+    public float dehydrationDamage = 0.5f;
+    private bool isDead;
+
     public float health {  get; private set; }
     public float stamina { get; private set; }
     public float hunger { get; private set; }
@@ -50,8 +55,22 @@ public class StatsHandler : MonoBehaviour
             Die();
     }
 
+    //Ignores armor and doesn't count as an attack
+    private void TakeDamageOverTime(float damage)
+    {
+        health -= damage;
+
+        if (health <= 0)
+            Die();
+    }
+
     private void Die()
     {
+        if (isDead)
+            return;
+
+        isDead = true;
+
         NPCController npc = gameObject.GetComponent<NPCController>();
 
         if (npc != null)
@@ -90,10 +109,8 @@ public class StatsHandler : MonoBehaviour
             yield return new WaitForSeconds(1f);
             if(hunger > 0.01f)
                 hunger -= depletionRate;
-            else if(stamina > 0.01f)
-                stamina -= depletionRate;
             else
-                health -= depletionRate;
+                TakeDamageOverTime(starvationDamage);
         }
     }
     private IEnumerator GetThirsty()
@@ -104,10 +121,8 @@ public class StatsHandler : MonoBehaviour
             yield return new WaitForSeconds(1f);
             if(thirst > 0.01f)
                 thirst -= depletionRate;
-            else if(stamina > 0.01f)
-                stamina -= depletionRate;
             else
-                health -= depletionRate;
+                TakeDamageOverTime(dehydrationDamage);
         }
     }
     private void RestoreStats(ConsumableType type, int amount)
